@@ -1,0 +1,10 @@
+#ifndef _AI_
+#define _AI_
+#include <A>
+
+#define ai_schema(X,Y) \
+i_prop(X,Y,int,epochs)
+
+declare_class(ai)
+
+#endif

@@ -1,0 +1,8 @@
+pytorch https://github.com/pytorch/pytorch
+    -DBUILD_SHARED_LIBS=ON
+    -DBUILD_ATEN_ONLY=ON
+
+lib:
+    A pytorch
+app:
+    A
