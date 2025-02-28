@@ -1,8 +1,6 @@
-pytorch https://github.com/pytorch/pytorch
-    -DBUILD_SHARED_LIBS=ON
-    -DBUILD_ATEN_ONLY=ON
+A https://github.com/ar-visions/A main
 
 lib:
-    A pytorch
+    A
 app:
     A

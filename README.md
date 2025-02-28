@@ -1,2 +1,4 @@
 # ai
-PyTorch interface using A-type (C11)
+forward and backward propagation project
+defined by a keras-like api
+exportable from pytorch, tensorflow or others

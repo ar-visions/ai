@@ -1,10 +1,169 @@
 #ifndef _AI_
 #define _AI_
+
 #include <A>
 
-#define ai_schema(X,Y) \
-i_prop(X,Y,int,epochs)
+#define quantized_schema(X,Y,...) \
+    i_prop(X,Y, public, veci8,          data) \
+    i_prop(X,Y, public, vecf,           realized) \
+    i_prop(X,Y, public, i32,            offset) \
+    i_prop(X,Y, public, f32,            scale)
+#ifndef quantized_intern
+#define quantized_intern
+#endif
+declare_class(quantized)
 
-declare_class(ai)
+/// should make this veci8 -- we just need a way to quantize
+declare_meta(tensor, array, quantized)
+
+#define Initializer_schema(X,Y,...) \
+    enum_value_v(X,Y, undefined,        0) \
+    enum_value_v(X,Y, random,           1) \
+    enum_value_v(X,Y, zeros,            2) \
+    enum_value_v(X,Y, glorot_uniform,   3)
+declare_enum (Initializer)
+
+#define Activation_schema(X,Y,...) \
+    enum_value_v(X,Y, none,             0) \
+    enum_value_v(X,Y, relu,             1)
+declare_enum (Activation)
+
+#define Pooling_schema(X,Y,...) \
+    enum_value_v(X,Y, undefined,        0) \
+    enum_value_v(X,Y, max,              1) \
+    enum_value_v(X,Y, min,              2) \
+    enum_value_v(X,Y, average,          3)
+declare_enum (Pooling)
+
+/// standard training op
+/// forward and back will read a pre-alloc'd tensor (stationary)
+/// they write to a pre-alloc'd tensor of the next op (result op for last)
+#define op_schema(X,Y,...) \
+    i_prop    (X,Y, required, tensor,        tensor) \
+    i_prop    (X,Y, required, string,        name) \
+    i_prop    (X,Y, public,   array_string,  inputs) \
+    i_prop    (X,Y, public,   Activation,    activation) \
+    i_prop    (X,Y, public,   i8,            threshold) \
+    i_prop    (X,Y, intern,   array,         op_inputs) \
+    i_prop    (X,Y, intern,   tensor,        output) \
+    i_method  (X,Y, public,   none,          forward) \
+    i_method  (X,Y, public,   none,          back) \
+    i_override(X,Y, method,   init)
+#ifndef op_intern
+#define op_intern
+#endif
+declare_class (op)
+
+declare_meta(ops, array, op)
+
+#define input_schema(X,Y,...)
+#ifndef input_intern
+#define input_intern
+#endif
+declare_mod (input, op)
+
+#define output_schema(X,Y,...)
+#ifndef output_intern
+#define output_intern
+#endif
+declare_mod (output, op)
+
+/*
+---------------------------------------------------------------------------------------
+ concatenate (merges multiple vectors into one along provided axis)
+---------------------------------------------------------------------------------------
+ axis - The main property that specifies which axis to concatenate along. For example:
+ axis=1 or axis=-1: Concatenate along the feature/channel dimension (most common)
+ axis=0: Concatenate along the batch dimension
+ for 2D inputs: axis=1 would concatenate horizontally
+ for images: axis=3 or axis=-1 would concatenate along the channel dimension
+*/
+#define concatenate_schema(X,Y,...) \
+    i_prop(X,Y, public, i32, axis) \
+    i_override(X,Y, method, init, forward)
+#ifndef concatenate_intern
+#define concatenate_intern
+#endif
+declare_mod (concatenate, op)
+
+/*
+---------------------------------------------------------------------------------------
+ conv
+---------------------------------------------------------------------------------------
+* filters - Integer, the dimensionality of the output space
+* kernel_size - Integer or tuple/list of 2 integers, specifying height and width of the 2D convolution window
+* strides - Integer or tuple/list of 2 integers, specifying strides of the convolution
+* padding - One of "valid" or "same"
+* activation - Activation function to use
+* input_shape - Only needed if this is the first layer
+*/
+/*
+ we could bind f16 or f32 to quantized, performing 
+ */
+#define conv_schema(X,Y,...) \
+    i_prop    (X,Y, public,   i32,        axis)    \
+    i_prop    (X,Y, required, i32,        filters) \
+    i_prop    (X,Y, required, veci64,     kernel)  \
+    i_prop    (X,Y, public,   veci64,     strides) \
+    i_prop    (X,Y, public, quantized,  weights) \
+    i_prop    (X,Y, public, quantized,  biases)  \
+    i_override(X,Y, method,     init) \
+    i_override(X,Y, method,     forward) \
+    i_override(X,Y, method,     back)
+#ifndef conv_intern
+#define conv_intern
+#endif
+declare_mod (conv, op)
+
+#define reshape_schema(X,Y,...) \
+    i_prop    (X,Y, public,   u32,        units)
+#ifndef reshape_intern
+#define reshape_intern
+#endif
+declare_mod (reshape, op)
+
+#define dense_schema(X,Y,...) \
+    i_prop    (X,Y, public,   u32,        units) \
+    i_prop    (X,Y, public,   object,     kernel_initializer) \
+    i_prop    (X,Y, public,   object,     weight_initializer) \
+    i_override(X,Y, method,     init) \
+    i_override(X,Y, method,     forward) \
+    i_override(X,Y, method,     back)
+#ifndef dense_intern
+#define dense_intern
+#endif
+declare_mod (dense, op)
+
+#define pool_schema(X,Y,...) \
+    i_prop    (X,Y, public,   Pooling,    type) \
+    i_override(X,Y, method,     init) \
+    i_override(X,Y, method,     forward) \
+    i_override(X,Y, method,     back)
+#ifndef pool_intern
+#define pool_intern
+#endif
+declare_mod (pool, op)
+
+#define relu_schema(X,Y,...) \
+    i_override(X,Y, method,     init)
+#ifndef relu_intern
+#define relu_intern
+#endif
+declare_mod (relu, op)
+
+#define keras_schema(X,Y,...) \
+    i_prop    (X,Y, required, string,        ident) \
+    i_prop    (X,Y, public,   num,           quality) \
+    i_prop    (X,Y, public,   ops,           ops) \
+    i_prop    (X,Y, intern,   tensor,        input) \
+    i_prop    (X,Y, intern,   tensor,        output) \
+    i_prop    (X,Y, intern,   map,           op_map) \
+    i_method  (X,Y, public,   none,  train,    i32) \
+    i_method  (X,Y, public,   none,  forward,  tensor) \
+    i_override(X,Y, method,   init)
+#ifndef keras_intern
+#define keras_intern
+#endif
+declare_class (keras)
 
 #endif
