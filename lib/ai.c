@@ -1,14 +1,18 @@
 #include <import>
+#include <math.h>
 
 /// this post, post-init pattern is why its nice to have interns accessible in the module
 /// that makes things far better in a language, i think.  intern is internal to the module
-/// if you cannot trust your own module then thats really odd
+/// if you cannot trust your own module then thats really odd; the intern applies to the member space
+/// but accessibility is within module
+
 /// with silver, intern is about module access; it actually makes things easier to shift around
-/// its more free!
+/// its more free,
+
 /// silver really is based on A, and with A 
 /// you may load entire objects quite easily
 /// without inventing new protocol on top of an object model
-
+ 
 none keras_init(keras k) {
     /// construct operation map
     k->op_map = map();
@@ -30,13 +34,16 @@ none keras_init(keras k) {
         each (a->op_inputs, op, i)
             each_ (i->output, quantized, q)
                 push (a->tensor, q);
-        verify (instanceof(op, input) || len(a->tensor) > 0, "no inputs resolved");
+        verify (instanceof(a, input) || len(a->tensor) > 0, "no inputs resolved");
 
         // parents output is our input
         a->output = tensor();
         op parent = get(a->op_inputs, 0);
-        each (a->op_inputs, op, i)
+        each (a->op_inputs, op, i) { }
     }
+
+    // find output
+    op output = get(k->op_map, string("output"));
 
 }
 
@@ -55,8 +62,8 @@ none keras_forward(keras k, tensor input) {
 
 // all other layers that perform relu should fuse the operation
 none op_forward(op a) {
-    if (a->activation == Activation_relu) {
-        i64 u8_count    = shape_total(a->input_shape);
+    if (a->activation) {
+        i64 u8_count    = shape_total(a->tensor); // this must return the tensor shape; test this
         quantized i0    = first(a->tensor);
         quantized o0    = first(a->output);
         i64 u8_actual   = A_len(i0); /// it can respond to len
@@ -66,8 +73,22 @@ none op_forward(op a) {
         /// we should probably assert the offsets are the same for this tensor
         verify(i0->offset == o0->offset, "expected output tensor to be quantized the same (offset)");
         verify(i0->scale  == o0->scale,  "expected output tensor to be quantized the same (scale)");
-        for (i64 i = 0; i < u8_count; i++)
-            output_data[i] = max(o0->offset, input_data[i]);
+
+        if (a->activation == Activation_relu) {
+            for (i64 i = 0; i < u8_count; i++)
+                output_data[i] = max(o0->offset, input_data[i]);
+        } else if (a->activation == Activation_tanh) {
+            for (i64 i = 0; i < u8_count; i++) {
+                // Dequantize: Convert i8 -> f32
+                float x = (input_data[i] - i0->offset) * i0->scale;
+                // Apply tanh function
+                float y = tanhf(x);
+                // Requantize: Convert f32 -> i8
+                i8 quantized_y = (i8)(roundf(y / o0->scale) + o0->offset);
+                // Store the result
+                output_data[i] = quantized_y;
+            }
+        }
     }
 }
 
@@ -112,55 +133,110 @@ none dense_init(dense a) {
     a->kernel_initializer = NULL;
     a->weight_initializer = NULL;
     return;
-}
+} 
 
 none dense_forward(dense a) {
-    // Implement dense layer forward pass
-    // This will perform matrix multiplication between input and weights
-    // Then add bias and apply activation if specified
     return;
 }
 
 none dense_back(dense a) {
-    // Implement dense layer forward pass
-    // This will perform matrix multiplication between input and weights
-    // Then add bias and apply activation if specified
     return;
 }
 
-// ReLU implementation
 none relu_init(relu a) {
     a->activation = Activation_relu;
     return;
 }
+ 
+ static sz seek_length(FILE* f) {
+    fseek(f, 0, SEEK_END);
+    sz flen = ftell(f) / sizeof(float);
+    fseek(f, 0, SEEK_SET);
+    return flen;
+ }
 
-none relu_forward(relu a) {
-    // Implement ReLU activation
-    // For each element in the input tensor:
-    // output = max(input, threshold)
+// called from the generic path read (json parse)
+// needs to also load offset and scale
+quantized quantized_with_string(quantized a, string loc) {
+    path uri_f32 = form(path, "models/%o.f32", loc);
+    if (exists(uri_f32)) {
+        FILE* f = fopen(uri_f32->chars, "rb");;
+        sz flen = seek_length(f);
+        vecf res = A_valloc(typeid(vecf), typeid(f32), flen, flen, true);
+        verify(fread(res, flen, 1, f) == 1, "could not read path: %o", uri_f32);
+        fclose(f);
+        a->realized = res;
+    } else {
+        path uri_i8  = form(path, "models/%o.i8", loc); /// must really contain two floats for this to make sense.  i do not want this misbound; and its required model-wise
+        verify(exists(uri_i8), "i8 fallback not found");
+        FILE* f = fopen(uri_i8->chars, "rb");
+        sz flen = seek_length(f);
+        veci8 res = A_valloc(typeid(veci8), typeid(i8), flen, flen, true);
+        verify(fread(&a->scale,  sizeof(float), 1, f) == 1, "scale");
+        verify(fread(&a->offset, sizeof(float), 1, f) == 1, "offset");
+        verify(fread(res, flen, 1, f) == 1, "could not read path: %o", uri_i8);
+        fclose(f);
+        a->data = res;
+    }
+    return a;
 }
 
-// Quantized implementation
+/// construct with dimension shape (not the data)
+quantized quantized_with_array(quantized a, array dims) {
+    num count = len(dims);
+    i64 shape[32];
+    i64 index = 0;
+    each (dims, object, e) {
+        i64* i = instanceof(e, i64);
+        shape[index++] = *i;
+    }
+    a->shape  = A_vec(typeid(i64), index, shape);
+    i64 total = shape_total(a->shape); // improve vectors in time
+    a->data   = A_valloc(typeid(i8), typeid(i8), total, total, false);
+    return a;
+}
+ 
 none quantized_init(quantized a) {
 }
 
-// Pool implementation
+none flatten_init(flatten a) {
+}
+
+none flatten_forward(flatten a) {
+    /// tensor to reduce is at (i8*)a->input->data
+}
+
+none flatten_back(flatten a) {
+    /// ?
+}
+
+
 none pool_init(pool a) {
-    // set output shape
-    verify(!a->output_shape, "unexpected output_shape");
-    i64 h = get(a->output_shape, 0);
-    i64 w = get(a->output_shape, 1);
-    i64 c = last(a->output_shape);
-    verify(A_len(a->input_shape) == 3, "unexpected input shape: %o", a->input_shape); 
-    a->output_shape = shape(h / 2, w / 2, c, 0);
+    quantized i = get(a->tensor, 0);
+    verify(A_len(i->shape) == 3, "unexpected input shape: %o", i->shape); 
+    i64 h = shape_get(i->shape, 0);
+    i64 w = shape_get(i->shape, 1);
+    i64 c = shape_get(i->shape, 2);
+}
+
+none pool_forward(pool a) {
+    /// tensor to reduce is at (i8*)a->input->data
+}
+
+none pool_back(pool a) {
+    /// ?
 }
 
 define_enum (Initializer)
 define_enum (Activation)
+define_enum (Padding)
+define_enum (Pooling)
 define_class(op)
 define_mod  (input,       op)
+define_mod  (flatten,     op)
 define_mod  (concatenate, op)
 define_mod  (conv,        op)
+define_mod  (pool,        op)
 define_mod  (dense,       op)
 define_mod  (relu,        op)
 define_mod  (output,      op)
