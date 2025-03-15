@@ -3,29 +3,22 @@
 
 #include <A>
 
-#define quantized_schema(X,Y,...) \
+#define tensor_schema(X,Y,...) \
     i_ctr (X,Y, public, string) \
     i_ctr (X,Y, public, array) \
-    i_prop(X,Y, public, veci64,         shape) \
+    i_prop(X,Y, public, shape,          shape) \
     i_prop(X,Y, public, veci8,          data) \
     i_prop(X,Y, public, vecf,           realized) \
     i_prop(X,Y, public, i32,            offset) \
-    i_prop(X,Y, public, f32,            scale)
-#ifndef quantized_intern
-#define quantized_intern
-#endif
-declare_class(quantized)
-
-
-#define tensor_schema(X,Y,...) \
-    i_ctr (X,Y, public, string) \
-    i_ctr (X,Y, public, array)
+    i_prop(X,Y, public, f32,            scale) \
+    i_prop(X,Y, intern, u64,            total) \
+    i_method(X,Y, public, none, resize, tensor) \
+    i_method(X,Y, public, none, gemm,   tensor, tensor, bool, tensor) \
+    i_override(X,Y, method, init)
 #ifndef tensor_intern
 #define tensor_intern
 #endif
-
-/// should make this veci8 -- we just need a way to quantize
-declare_meta(tensor, array, quantized)
+declare_class(tensor)
 
 #define Initializer_schema(X,Y,...) \
     enum_value_v(X,Y, undefined,        0) \
@@ -63,9 +56,9 @@ declare_enum (Pooling)
     i_prop    (X,Y, public,   i8,            threshold) \
     i_prop    (X,Y, intern,   array,         op_inputs) \
     i_prop    (X,Y, intern,   tensor,        output) \
+    i_method  (X,Y, public,   none,          finalize) \
     i_method  (X,Y, public,   none,          forward) \
-    i_method  (X,Y, public,   none,          back) \
-    i_override(X,Y, method,   init)
+    i_method  (X,Y, public,   none,          back)
 #ifndef op_intern
 #define op_intern
 #endif
@@ -99,7 +92,7 @@ declare_mod (output, op)
 */
 #define concatenate_schema(X,Y,...) \
     i_prop(X,Y, public, i32, axis) \
-    i_override(X,Y, method, init, forward)
+    i_override(X,Y, method, finalize, forward)
 #ifndef concatenate_intern
 #define concatenate_intern
 #endif
@@ -117,19 +110,21 @@ declare_mod (concatenate, op)
 * input_shape - Only needed if this is the first layer
 */
 /*
- we could bind f16 or f32 to quantized, performing 
+ we could bind f16 or f32 to tensor, performing 
  */ 
 #define conv_schema(X,Y,...) \
     i_prop    (X,Y, public,   i32,        axis)    \
     i_prop    (X,Y, required, i32,        filters) \
     i_prop    (X,Y, required, Padding,    padding)  \
-    i_prop    (X,Y, required, veci64,     kernel_size)  \
-    i_prop    (X,Y, required, veci64,     strides) \
+    i_prop    (X,Y, required, shape,      kernel_size)  \
+    i_prop    (X,Y, required, shape,      strides) \
     i_prop    (X,Y, public,   i32,        in_channels) \
     i_prop    (X,Y, public,   i32,        out_channels) \
-    i_prop    (X,Y, public, quantized,  weights) \
-    i_prop    (X,Y, public, quantized,  bias)  \
-    i_override(X,Y, method,     init) \
+    i_prop    (X,Y, public, tensor,  weights) \
+    i_prop    (X,Y, public, tensor,  bias)  \
+    i_prop    (X,Y, public, tensor,  weights_matrix) \
+    i_prop    (X,Y, public, tensor,  im2col_matrix) \
+    i_override(X,Y, method,     finalize) \
     i_override(X,Y, method,     forward) \
     i_override(X,Y, method,     back)
 #ifndef conv_intern
@@ -156,9 +151,9 @@ declare_mod (flatten, op)
     i_prop    (X,Y, public,   u32,        output_dim) \
     i_prop    (X,Y, public,   object,     kernel_initializer) \
     i_prop    (X,Y, public,   object,     weight_initializer) \
-    i_prop    (X,Y, public, quantized,  weights) \
-    i_prop    (X,Y, public, quantized,  bias)  \
-    i_override(X,Y, method,     init) \
+    i_prop    (X,Y, public, tensor,  weights) \
+    i_prop    (X,Y, public, tensor,  bias)  \
+    i_override(X,Y, method,     finalize) \
     i_override(X,Y, method,     forward) \
     i_override(X,Y, method,     back)
 #ifndef dense_intern
@@ -168,9 +163,9 @@ declare_mod (dense, op)
 
 #define pool_schema(X,Y,...) \
     i_prop    (X,Y, public,   Pooling,    type) \
-    i_prop    (X,Y, required, veci64,     pool_size)  \
-    i_prop    (X,Y, public,   veci64,     strides) \
-    i_override(X,Y, method,     init) \
+    i_prop    (X,Y, required, shape,      pool_size)  \
+    i_prop    (X,Y, public,   shape,      strides) \
+    i_override(X,Y, method,     finalize) \
     i_override(X,Y, method,     forward) \
     i_override(X,Y, method,     back)
 #ifndef pool_intern
@@ -188,12 +183,13 @@ declare_mod (relu, op)
 #define keras_schema(X,Y,...) \
     i_prop    (X,Y, required, string,        ident) \
     i_prop    (X,Y, public,   num,           quality) \
+    i_prop    (X,Y, public,   ops,           order) \
     i_prop    (X,Y, public,   ops,           ops) \
     i_prop    (X,Y, public,   tensor,        output) \
     i_prop    (X,Y, public,   tensor,        input) \
     i_prop    (X,Y, intern,   map,           op_map) \
     i_method  (X,Y, public,   none,  train,    i32) \
-    i_method  (X,Y, public,   none,  forward,  tensor) \
+    i_method  (X,Y, public,   tensor,  forward,  tensor) \
     i_override(X,Y, method,   init)
 #ifndef keras_intern
 #define keras_intern

@@ -12,7 +12,62 @@
 /// silver really is based on A, and with A 
 /// you may load entire objects quite easily
 /// without inventing new protocol on top of an object model
- 
+/// for instance: how do you import from json?
+/// same way!  sometimes you take in arrays,
+/// sometimes you take in string, or numeric.
+/// thats unprecedented for object models in any language, let alone C
+
+none topo_visit(keras k, op current, map visited, map in_progress) {
+    bool* prog = get(in_progress, current->name);
+    if (prog && *prog) {
+        error("Cycle detected in network graph at operation: %s", current->name);
+        return;
+    }
+    
+    // Skip if already visited
+    if (get(visited, current->name)) {
+        return;
+    }
+    
+    // Mark as in progress (for cycle detection)
+    set(in_progress, current->name, A_bool(true));
+    
+    // Visit all dependencies (inputs) first
+    each (current->op_inputs, op, input_op) {
+        topo_visit(k, input_op, visited, in_progress);
+    }
+    
+    // Mark as visited and add to execution order
+    set(visited, current->name, A_bool(true));
+    set(in_progress, current->name, A_bool(false));
+    push(k->order, current);
+}
+
+// Helper function to build execution order
+none build_exec_order(keras k) {
+    k->order = array();
+
+    // create a visited flag for each op to track progress
+    map visited     = map(hsize, 32);
+    map in_progress = map(hsize, 32); // To detect cycles
+    
+    // for each operation, ensure it's visited
+    each (k->ops, op, operation) {
+        if (!get(visited, operation->name)) {
+            topo_visit(k, operation, visited, in_progress);
+        }
+    }
+}
+
+tensor find_output(keras k, op a) {
+    each (k->ops, op, j)
+        each (j->op_inputs, op, input_op)
+            if (input_op == a) return j->tensor;
+
+    return null;
+}
+
+/// load the ops and initialize them after
 none keras_init(keras k) {
     /// construct operation map
     k->op_map = map();
@@ -24,48 +79,67 @@ none keras_init(keras k) {
         /// create resolved op list, corresponding 
         /// with index-of the string-name from inputs
         a->op_inputs = array();
-        each_ (a->inputs, string, input) {
+        each (a->inputs, string, input) {
             op res = get(k->op_map, input);
             verify (res, "could not resolve operation: %o", input);
             push (a->op_inputs, res);
         }
-
-        a->tensor = tensor();
-        each (a->op_inputs, op, i)
-            each_ (i->output, quantized, q)
-                push (a->tensor, q);
-        verify (instanceof(a, input) || len(a->tensor) > 0, "no inputs resolved");
-
-        // parents output is our input
-        a->output = tensor();
-        op parent = get(a->op_inputs, 0);
-        each (a->op_inputs, op, i) { }
     }
 
-    // find output
+    /// create order
+    build_exec_order(k);
+    op f = get(k->order, 0);
+    verify(isa(f) == typeid(input), "input expected");
+    k->input = hold(f->tensor); // an inputs output is our input.. it does have a lonely little input tensor sitting there unused though
+
+    /// finalize layers
+    each (k->ops, op, a) {
+        a->output = find_output(k, a);
+        each(a->op_inputs, op, i) {
+            if (isa(i) == typeid(input)) {
+                verify(compare(a->tensor->shape, i->tensor->shape) == 0, "incompatible shapes");
+                drop(a->tensor);
+                a->tensor = hold(i->tensor);
+            }
+        }
+        finalize(a);
+    }
+
     op output = get(k->op_map, string("output"));
-
-}
-
-// post-init is mostly established in keras_init 
-// (at this point, we have all model data in props)
-none op_init(op a) {
-    return;
+    k->output = hold(output->tensor);
 }
 
 none keras_train(keras k, i32 epochs) {
 }
 
-none keras_forward(keras k, tensor input) {
-    /// copy input to model input (just so we may be async with this memory)
+tensor keras_forward(keras k, tensor input) {
+    if (compare(input->shape, k->input->shape) != 0)
+        resize(input, k->input);
+    else {
+        /// copy input tensor, and pass forward
+        memcpy(k->input->realized, input->realized, total(input->shape) * sizeof(f32));
+    }
+    each (k->order, op, current)
+        forward(current);
+    /// copy output tensor -- if results are stored, we would not want those changing
+    tensor res = tensor(shape, k->output->shape);
+    print("keras output ident = %x", k->output);  
+    memcpy(res->realized, k->output->realized, sizeof(f32) * total(k->output->shape));
+    return res;
+}
+
+// post-init is mostly established in keras_init 
+// (at this point, we have all model data in props)
+none op_finalize(op a) {
+    return;
 }
 
 // all other layers that perform relu should fuse the operation
 none op_forward(op a) {
     if (a->activation) {
         i64 u8_count    = shape_total(a->tensor); // this must return the tensor shape; test this
-        quantized i0    = first(a->tensor);
-        quantized o0    = first(a->output);
+        tensor i0       = a->tensor;
+        tensor o0       = a->output;
         i64 u8_actual   = A_len(i0); /// it can respond to len
         i8* input_data  = vdata(i0);
         i8* output_data = vdata(o0);
@@ -96,8 +170,9 @@ none op_back(op a) {
     return;
 }
 
+
 // Concatenate implementation
-none concatenate_init(concatenate a) {
+none concatenate_finalize(concatenate a) {
     a->axis = -1;  // Default to last dimension
     return;
 }
@@ -112,120 +187,20 @@ none concatenate_back(concatenate a) {
     return;
 }
 
-// Conv implementation
-none conv_init(conv a) {
-    return;
-}
-
-none conv_forward(conv a) {
-    // Implement convolution operation
-    return;
-}
-
-none conv_back(conv a) {
-    // Implement backpropagation for convolution
-    return;
-}
-
-// Dense implementation
-none dense_init(dense a) {
-    a->units = 0;
-    a->kernel_initializer = NULL;
-    a->weight_initializer = NULL;
-    return;
-} 
-
-none dense_forward(dense a) {
-    return;
-}
-
-none dense_back(dense a) {
-    return;
-}
 
 none relu_init(relu a) {
     a->activation = Activation_relu;
     return;
 }
- 
- static sz seek_length(FILE* f) {
-    fseek(f, 0, SEEK_END);
-    sz flen = ftell(f) / sizeof(float);
-    fseek(f, 0, SEEK_SET);
-    return flen;
- }
 
-// called from the generic path read (json parse)
-// needs to also load offset and scale
-quantized quantized_with_string(quantized a, string loc) {
-    path uri_f32 = form(path, "models/%o.f32", loc);
-    if (exists(uri_f32)) {
-        FILE* f = fopen(uri_f32->chars, "rb");;
-        sz flen = seek_length(f);
-        vecf res = A_valloc(typeid(vecf), typeid(f32), flen, flen, true);
-        verify(fread(res, flen, 1, f) == 1, "could not read path: %o", uri_f32);
-        fclose(f);
-        a->realized = res;
-    } else {
-        path uri_i8  = form(path, "models/%o.i8", loc); /// must really contain two floats for this to make sense.  i do not want this misbound; and its required model-wise
-        verify(exists(uri_i8), "i8 fallback not found");
-        FILE* f = fopen(uri_i8->chars, "rb");
-        sz flen = seek_length(f);
-        veci8 res = A_valloc(typeid(veci8), typeid(i8), flen, flen, true);
-        verify(fread(&a->scale,  sizeof(float), 1, f) == 1, "scale");
-        verify(fread(&a->offset, sizeof(float), 1, f) == 1, "offset");
-        verify(fread(res, flen, 1, f) == 1, "could not read path: %o", uri_i8);
-        fclose(f);
-        a->data = res;
-    }
-    return a;
-}
-
-/// construct with dimension shape (not the data)
-quantized quantized_with_array(quantized a, array dims) {
-    num count = len(dims);
-    i64 shape[32];
-    i64 index = 0;
-    each (dims, object, e) {
-        i64* i = instanceof(e, i64);
-        shape[index++] = *i;
-    }
-    a->shape  = A_vec(typeid(i64), index, shape);
-    i64 total = shape_total(a->shape); // improve vectors in time
-    a->data   = A_valloc(typeid(i8), typeid(i8), total, total, false);
-    return a;
-}
- 
-none quantized_init(quantized a) {
-}
-
-none flatten_init(flatten a) {
-}
 
 none flatten_forward(flatten a) {
     /// tensor to reduce is at (i8*)a->input->data
 }
 
 none flatten_back(flatten a) {
-    /// ?
 }
 
-
-none pool_init(pool a) {
-    quantized i = get(a->tensor, 0);
-    verify(A_len(i->shape) == 3, "unexpected input shape: %o", i->shape); 
-    i64 h = shape_get(i->shape, 0);
-    i64 w = shape_get(i->shape, 1);
-    i64 c = shape_get(i->shape, 2);
-}
-
-none pool_forward(pool a) {
-    /// tensor to reduce is at (i8*)a->input->data
-}
-
-none pool_back(pool a) {
-    /// ?
-}
 
 define_enum (Initializer)
 define_enum (Activation)
@@ -235,12 +210,8 @@ define_class(op)
 define_mod  (input,       op)
 define_mod  (flatten,     op)
 define_mod  (concatenate, op)
-define_mod  (conv,        op)
-define_mod  (pool,        op)
-define_mod  (dense,       op)
 define_mod  (relu,        op)
 define_mod  (output,      op)
 define_class(keras)
-define_meta (tensor, array, quantized)
 define_meta (ops,    array, op)
-define_class(quantized)
+

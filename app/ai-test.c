@@ -1,15 +1,13 @@
 #include <import>
 
-/// goal: get keras operational in native
-///       0.025 accuracy error is decent for first stage target (prior to correct and feature)
-///       walk the walk!
 int main(int argc, symbol args[]) {
     A_start();
-    path  f = form(path, "models/vision_target.json");
-    keras k = read(f, typeid(keras));
-    if (exists(f)) {
-        print("path exists");
-    }
-    print("keras ident %o\n", k->ident);
+    path   f      = form(path, "models/vision_base.json");
+    keras  k      = read(f, typeid(keras));
+    tensor input  = tensor (shape, new_shape(32, 32, 1, 0));
+    memset(input->realized, 127, sizeof(f32) * 2);
+    tensor output = forward(k, input);
+    f32*   out    = output->realized;
+    print("keras model %o, output = %.2f, %.2f, %.2f\n", k->ident, out[0], out[1], out[2]);
     return 0;
 }
