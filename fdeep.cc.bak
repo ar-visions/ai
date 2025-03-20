@@ -1,0 +1,32 @@
+#include <fdeep/fdeep.hpp>
+#include <iostream>
+
+extern "C" {
+void test_fdeep(float* input, float* result);
+}
+
+
+void test_fdeep(float* input, float* result) {
+    fdeep::model f = fdeep::load_model("models/fdeep_base.json");
+
+    float sum = 0;
+    for (int i = 0; i < 32 * 32 * 1; i++)
+        sum += input[i];
+    printf("sum is %.2f\n", sum);
+
+    // Create input tensor (32x32 grayscale image)
+    std::vector<float> input_data(32 * 32);
+    std::memcpy(input_data.data(), input, 32 * 32 * 1 * sizeof(float));
+    fdeep::tensor input_tensor(fdeep::tensor_shape(32, 32, 1), input_data);
+
+    // Run inference
+    const auto res = f.predict({input_tensor});
+
+    // Print results
+    for (const auto& tensor : res) {
+        for (const auto& val : tensor.to_vector()) {
+            std::cout << val << " ";
+        }
+        std::cout << std::endl;
+    }
+}

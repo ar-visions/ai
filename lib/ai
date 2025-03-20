@@ -3,17 +3,27 @@
 
 #include <A>
 
+#define Activation_schema(X,Y,...) \
+    enum_value_v(X,Y, none,             0) \
+    enum_value_v(X,Y, relu,             1) \
+    enum_value_v(X,Y, tanh,             2)
+declare_enum (Activation)
+
+typedef struct _tensor* tensor;
 #define tensor_schema(X,Y,...) \
     i_ctr (X,Y, public, string) \
     i_ctr (X,Y, public, array) \
+    i_ctr (X,Y, public, image) \
     i_prop(X,Y, public, shape,          shape) \
-    i_prop(X,Y, public, veci8,          data) \
-    i_prop(X,Y, public, vecf,           realized) \
+    i_prop(X,Y, public, vector_i8,      data) \
+    i_prop(X,Y, public, vector_f32,     realized) \
+    i_prop(X,Y, public, vector_f32,     grad) \
     i_prop(X,Y, public, i32,            offset) \
     i_prop(X,Y, public, f32,            scale) \
     i_prop(X,Y, intern, u64,            total) \
-    i_method(X,Y, public, none, resize, tensor) \
-    i_method(X,Y, public, none, gemm,   tensor, tensor, bool, tensor) \
+    i_method(X,Y, public, f32,  sum) \
+    i_method(X,Y, public, f32,  grad_sum) \
+    i_method(X,Y, public, none, gemm,   tensor, tensor, Activation, tensor) \
     i_override(X,Y, method, init)
 #ifndef tensor_intern
 #define tensor_intern
@@ -26,12 +36,6 @@ declare_class(tensor)
     enum_value_v(X,Y, zeros,            2) \
     enum_value_v(X,Y, glorot_uniform,   3)
 declare_enum (Initializer)
-
-#define Activation_schema(X,Y,...) \
-    enum_value_v(X,Y, none,             0) \
-    enum_value_v(X,Y, relu,             1) \
-    enum_value_v(X,Y, tanh,             2)
-declare_enum (Activation)
 
 #define Padding_schema(X,Y,...) \
     enum_value_v(X,Y, valid,            0) \
@@ -46,8 +50,6 @@ declare_enum (Padding)
 declare_enum (Pooling)
 
 /// standard training op
-/// forward and back will read a pre-alloc'd tensor (stationary)
-/// they write to a pre-alloc'd tensor of the next op (result op for last)
 #define op_schema(X,Y,...) \
     i_prop    (X,Y, required, tensor,        tensor) \
     i_prop    (X,Y, required, string,        name) \
@@ -56,9 +58,11 @@ declare_enum (Pooling)
     i_prop    (X,Y, public,   i8,            threshold) \
     i_prop    (X,Y, intern,   array,         op_inputs) \
     i_prop    (X,Y, intern,   tensor,        output) \
+    i_prop    (X,Y, public,   tensor,        weights) \
+    i_prop    (X,Y, public,   tensor,        bias)  \
     i_method  (X,Y, public,   none,          finalize) \
     i_method  (X,Y, public,   none,          forward) \
-    i_method  (X,Y, public,   none,          back)
+    i_method  (X,Y, public,   tensor,        back, tensor)
 #ifndef op_intern
 #define op_intern
 #endif
@@ -98,30 +102,14 @@ declare_mod (output, op)
 #endif
 declare_mod (concatenate, op)
 
-/*
----------------------------------------------------------------------------------------
- conv
----------------------------------------------------------------------------------------
-* filters - Integer, the dimensionality of the output space
-* kernel_size - Integer or tuple/list of 2 integers, specifying height and width of the 2D convolution window
-* strides - Integer or tuple/list of 2 integers, specifying strides of the convolution
-* padding - One of "valid" or "same"
-* activation - Activation function to use
-* input_shape - Only needed if this is the first layer
-*/
-/*
- we could bind f16 or f32 to tensor, performing 
- */ 
+
 #define conv_schema(X,Y,...) \
     i_prop    (X,Y, public,   i32,        axis)    \
-    i_prop    (X,Y, required, i32,        filters) \
     i_prop    (X,Y, required, Padding,    padding)  \
     i_prop    (X,Y, required, shape,      kernel_size)  \
     i_prop    (X,Y, required, shape,      strides) \
     i_prop    (X,Y, public,   i32,        in_channels) \
     i_prop    (X,Y, public,   i32,        out_channels) \
-    i_prop    (X,Y, public, tensor,  weights) \
-    i_prop    (X,Y, public, tensor,  bias)  \
     i_prop    (X,Y, public, tensor,  weights_matrix) \
     i_prop    (X,Y, public, tensor,  im2col_matrix) \
     i_override(X,Y, method,     finalize) \
@@ -139,7 +127,9 @@ declare_mod (conv, op)
 #endif
 declare_mod (reshape, op)
 
-#define flatten_schema(X,Y,...)
+#define flatten_schema(X,Y,...) \
+    i_override(X,Y, method, forward) \
+    i_override(X,Y, method, back)
 #ifndef flatten_intern
 #define flatten_intern
 #endif
@@ -151,8 +141,6 @@ declare_mod (flatten, op)
     i_prop    (X,Y, public,   u32,        output_dim) \
     i_prop    (X,Y, public,   object,     kernel_initializer) \
     i_prop    (X,Y, public,   object,     weight_initializer) \
-    i_prop    (X,Y, public, tensor,  weights) \
-    i_prop    (X,Y, public, tensor,  bias)  \
     i_override(X,Y, method,     finalize) \
     i_override(X,Y, method,     forward) \
     i_override(X,Y, method,     back)
@@ -188,8 +176,9 @@ declare_mod (relu, op)
     i_prop    (X,Y, public,   tensor,        output) \
     i_prop    (X,Y, public,   tensor,        input) \
     i_prop    (X,Y, intern,   map,           op_map) \
-    i_method  (X,Y, public,   none,  train,    i32) \
+    i_method  (X,Y, public,   none,    train,    i32, map, f32) \
     i_method  (X,Y, public,   tensor,  forward,  tensor) \
+    i_method  (X,Y, public,   tensor,  back,     tensor) \
     i_override(X,Y, method,   init)
 #ifndef keras_intern
 #define keras_intern

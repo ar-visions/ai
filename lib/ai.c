@@ -109,23 +109,79 @@ none keras_init(keras k) {
     k->output = hold(output->tensor);
 }
 
-none keras_train(keras k, i32 epochs) {
+none keras_train(keras k, i32 epochs, map train, f32 learning_rate) {
+    for (i32 epoch = 0; epoch < epochs; epoch++) {
+        print("epoch %d/%d", epoch + 1, epochs);
+        pairs (train, kv) {
+            tensor input      = (tensor)kv->key;
+            tensor target     = (tensor)kv->value;
+            tensor output     = forward(k, input);
+            f32    sum0       = sum(input);
+            f32    loss       = 0;
+            tensor d_output   = tensor(shape, target->shape);
+            f32*   d_out_ptr  = d_output->realized;
+            f32*   output_ptr = output->realized;
+            f32*   target_ptr = target->realized;
+
+            for (i32 i = 0, t = total(target->shape); i < t; i++) {
+                f32 diff         = output_ptr[i] - target_ptr[i];
+                    loss        += diff * diff;
+                    d_out_ptr[i] = 2    * diff; // Gradient of MSE: dL/dy = 2(y - target)
+            }
+
+            loss /= total(target->shape);  print("loss: %.5f", loss);
+            tensor d_input = back(k, d_output);
+            each (k->ops, op, layer) {
+                if (layer->weights) {
+                    f32* w   = layer->weights->realized;
+                    f32* d_w = layer->weights->grad;  // Assume we store computed gradients here in backprop
+                    for (i32 i = 0; i < total(layer->weights->shape); i++)
+                        w[i] -= learning_rate * d_w[i];
+                }
+                if (layer->bias) {
+                    f32* b   = layer->bias->realized;
+                    f32* d_b = layer->bias->grad; // Bias gradients should be stored here
+                    for (i32 i = 0; i < total(layer->bias->shape); i++)
+                        b[i] -= learning_rate * d_b[i];
+                }
+            }
+            drop(d_output);
+            drop(d_input);
+        }
+    }
+    print("training complete.");
 }
 
 tensor keras_forward(keras k, tensor input) {
-    if (compare(input->shape, k->input->shape) != 0)
-        resize(input, k->input);
-    else {
-        /// copy input tensor, and pass forward
-        memcpy(k->input->realized, input->realized, total(input->shape) * sizeof(f32));
-    }
-    each (k->order, op, current)
+    /// copy input tensor, and pass forward
+    memcpy(k->input->realized, input->realized, total(input->shape) * sizeof(f32));
+    f32 f2 = sum(input);
+    //print("sum of keras input: %.2f", f2);
+
+    each (k->order, op, current) {
+        //f32 fi = sum(current->tensor);
+        //print("sum of input prior to op: %o: %.2f", current->name, fi);
+        //print("%s: %x %x", isa(current)->name, current->tensor->realized, current->output ? current->output->realized : null);
         forward(current);
-    /// copy output tensor -- if results are stored, we would not want those changing
+        //if (current->output) {
+        //    f32 f = sum(current->output);
+        //    print("sum of output after op: %o: %.2f", current->name, f);
+        //}
+    }
+
     tensor res = tensor(shape, k->output->shape);
-    print("keras output ident = %x", k->output);  
+    //print("keras output ident = %x", k->output->realized);  
     memcpy(res->realized, k->output->realized, sizeof(f32) * total(k->output->shape));
     return res;
+}
+
+tensor keras_back(keras k, tensor d_output) {
+    backwards (k->order, op, a) {
+        if (a->weights) memset(a->weights->grad, 0, total(a->weights->shape) * sizeof(f32));
+        if (a->bias)    memset(a->bias->grad,    0, total(a->bias->shape)    * sizeof(f32));
+        d_output = back(a, d_output);
+    }
+    return d_output;
 }
 
 // post-init is mostly established in keras_init 
@@ -166,10 +222,9 @@ none op_forward(op a) {
     }
 }
 
-none op_back(op a) {
-    return;
+tensor op_back(op a, tensor d_output) {
+    return d_output;
 }
-
 
 // Concatenate implementation
 none concatenate_finalize(concatenate a) {
@@ -183,8 +238,8 @@ none concatenate_forward(concatenate a) {
     return;
 }
 
-none concatenate_back(concatenate a) {
-    return;
+tensor concatenate_back(concatenate a, tensor d_output) {
+    return null;
 }
 
 
@@ -193,14 +248,20 @@ none relu_init(relu a) {
     return;
 }
 
-
 none flatten_forward(flatten a) {
-    /// tensor to reduce is at (i8*)a->input->data
+    int t = total(a->tensor->shape);
+    if (a->output->realized != a->tensor->realized) {
+        drop(a->output->realized);
+        a->output->realized = hold(a->tensor->realized);
+    }
 }
 
-none flatten_back(flatten a) {
+tensor flatten_back(flatten a, tensor d_output) {
+    int t = total(d_output->shape);
+    tensor flat = tensor(shape, shape_new(1, t, 0));
+    memcpy(flat->realized, d_output->realized, t * sizeof(f32));
+    return flat;
 }
-
 
 define_enum (Initializer)
 define_enum (Activation)

@@ -1,22 +1,8 @@
 A https://github.com/ar-visions/A main
 trinity https://github.com/ar-visions/trinity main
-tinyexr https://github.com/syoyo/tinyexr 648e47b
-	-DBUILD_SHARED_LIBS=ON
-	-DCMAKE_POSITION_INDEPENDENT_CODE=ON
-	> cp libtinyexr.so $IMPORT/lib/
-	> cp ../tinyexr.h $IMPORT/include/
-
-zlib https://github.com/madler/zlib 04f42ce
-png https://github.com/glennrp/libpng 07b8803
 
 lib:
     A trinity -mavx2 -mfma
-	tinyexr
-	z
-	png
 	m
-	-I$IMPORT/checkout/skia/modules/svg/include
-	-I$IMPORT/include/OpenEXR
-	-I$IMPORT/include/Imath
 app:
     A trinity -mavx2 -mfma

@@ -1,6 +1,6 @@
 #include <import>
 #include <math.h>
-#include <immintrin.h>  // AVX2
+#include <immintrin.h>
 
 static sz seek_length(FILE* f, AType of_type) {
     u64 start = ftell(f);
@@ -11,33 +11,128 @@ static sz seek_length(FILE* f, AType of_type) {
     return flen;
 }
 
+f32 tensor_sum(tensor a) {
+    int t = total(a->shape);
+    float sum = 0;
+    f32 *data = a->realized;
+    for (int i = 0; i < t; i++) {
+        sum += data[i];
+    }
+    return sum;
+}
+
+f32 tensor_grad_sum(tensor a) {
+    int t = total(a->shape);
+    float sum = 0;
+    f32 *data = a->grad;
+    for (int i = 0; i < t; i++) {
+        sum += data[i];
+    }
+    return sum;
+}
+
+none realize(tensor a) {
+    if (!a->realized)
+         a->realized = A_alloc2(typeid(vecf),  typeid(f32), a->shape, false);
+
+    f32* dst = a->realized;
+    u8*  src = (u8*)a->data;  // Now correctly treating as unsigned
+    int  t   = total(a->shape);
+    int  i  = 0;
+
+    // SIMD conversion from u8 to f32 (with normalization)
+    if (false)
+    for (; i + 32 <= t; i += 32) { 
+        // Load 32 bytes (u8)
+        __m256i u8_vals = _mm256_loadu_si256((__m256i*)&src[i]);
+
+        // Zero-extend unsigned 8-bit values to 16-bit
+        __m256i lo_i16 = _mm256_cvtepu8_epi16(_mm256_extracti128_si256(u8_vals, 0));
+        __m256i hi_i16 = _mm256_cvtepu8_epi16(_mm256_extracti128_si256(u8_vals, 1));
+
+        // Extend 16-bit values to 32-bit
+        __m256i lo_i32 = _mm256_cvtepu16_epi32(_mm256_extracti128_si256(lo_i16, 0));
+        __m256i hi_i32 = _mm256_cvtepu16_epi32(_mm256_extracti128_si256(lo_i16, 1));
+        __m256i lo2_i32 = _mm256_cvtepu16_epi32(_mm256_extracti128_si256(hi_i16, 0));
+        __m256i hi2_i32 = _mm256_cvtepu16_epi32(_mm256_extracti128_si256(hi_i16, 1));
+
+        // Convert int32 -> float32
+        __m256 lo_f32  = _mm256_cvtepi32_ps(lo_i32);
+        __m256 hi_f32  = _mm256_cvtepi32_ps(hi_i32);
+        __m256 lo2_f32 = _mm256_cvtepi32_ps(lo2_i32);
+        __m256 hi2_f32 = _mm256_cvtepi32_ps(hi2_i32);
+
+        // Normalize by dividing by 255.0f
+        __m256 scale = _mm256_set1_ps(1.0f / 255.0f);
+        lo_f32  = _mm256_mul_ps(lo_f32, scale);
+        hi_f32  = _mm256_mul_ps(hi_f32, scale);
+        lo2_f32 = _mm256_mul_ps(lo2_f32, scale);
+        hi2_f32 = _mm256_mul_ps(hi2_f32, scale);
+
+        // Store results
+        _mm256_storeu_ps(&dst[i], lo_f32);
+        _mm256_storeu_ps(&dst[i+8], hi_f32);
+        _mm256_storeu_ps(&dst[i+16], lo2_f32);
+        _mm256_storeu_ps(&dst[i+24], hi2_f32);
+    }
+
+    // Remainder loop for leftover elements
+    for (; i < t; i++)
+        dst[i] = ((float)(u8)src[i]) / 255.0f;
+
+    a->offset = 0.0;
+    a->scale  = 1 / 127.0; // we will want to fix this to -1.0 to 1.0 in training
+}
+
+tensor tensor_with_image(tensor a, image img) {
+    a->shape = shape_new(img->width, img->height, 1, 0);
+    a->data  = vector(type, typeid(i8), shape, a->shape);
+    memcpy(a->data, data(img), img->height * img->width * 1);
+    realize(a);
+    return a;
+}
+
 // called from the generic path read (json parse)
 // needs to also load offset and scale
 tensor tensor_with_string(tensor a, string loc) {
-    path uri_f32 = form(path, "models/%o.f32", loc);
-    path uri_i8  = form(path, "models/%o.i8", loc);
-    FILE* f;
-    bool is_f32 = exists(uri_f32);
-    f = fopen(is_f32 ? uri_f32->chars : uri_i8->chars, "rb");
-    a->shape = shape_read(f);
-    sz flen  = seek_length(f, typeid(f32));
-    if (is_f32) {
-        vecf res = A_alloc2(typeid(vecf), typeid(f32), a->shape, true);
-        i64 total = shape_total(a->shape);
-        verify(flen == total, "f32 mismatch in size");
-        verify(fread(res, sizeof(f32), flen, f) == flen, "could not read path: %o", uri_f32);
-        a->realized = res;
+    path uri = form(path, "%o", loc);
+    if (is_ext(uri, "png")) {
+        image img = image(uri, uri);
+        i8*   dat = data(img);
+        verify(img->channels = 1, "not grayscale");
+        i64 total = img->width * img->height * img->channels;
+        a->shape    = shape_new(img->width, img->height, 1, 0);
+        a->data     = A_alloc2(typeid(veci8), typeid(i8),  a->shape, false);
+        a->realized = A_alloc2(typeid(vecf),  typeid(f32), a->shape, false);
+        memcpy(a->data, data(img), img->height * img->width * 1);
+        a->offset = 0.0;
+        a->scale  = 1 / 127.0; // we will want to fix this to -1.0 to 1.0 in training
     } else {
-         /// must really contain two floats for this to make sense.  i do not want this misbound; and its required model-wise
-        veci8 res = A_alloc2(typeid(veci8), typeid(i8), a->shape, true);
-        verify(fread(&a->scale,  sizeof(float), 1, f) == 1, "scale");
-        verify(fread(&a->offset, sizeof(float), 1, f) == 1, "offset");
-        i64 total = shape_total(a->shape);
-        verify(flen == total, "i8 mismatch in size");
-        verify(fread(res, 1, flen, f) == flen, "could not read path: %o", uri_i8);
-        a->data = res;
+        path uri_f32 = form(path, "models/%o.f32", loc);
+        path uri_i8  = form(path, "models/%o.i8", loc);
+        FILE* f;
+        bool is_f32 = exists(uri_f32);
+        f = fopen(is_f32 ? uri_f32->chars : uri_i8->chars, "rb");
+        a->shape = shape_read(f);
+        sz flen  = seek_length(f, typeid(f32));
+        if (is_f32) {
+            vecf res = A_alloc2(typeid(vecf), typeid(f32), a->shape, false);
+            i64 total = shape_total(a->shape);
+            verify(flen == total, "f32 mismatch in size");
+            verify(fread(res, sizeof(f32), flen, f) == flen, "could not read path: %o", uri_f32);
+            a->realized = res;
+        } else {
+            /// must really contain two floats for this to make sense.  i do not want this misbound; and its required model-wise
+            veci8 res = A_alloc2(typeid(veci8), typeid(i8), a->shape, false);
+            verify(fread(&a->scale,  sizeof(float), 1, f) == 1, "scale");
+            verify(fread(&a->offset, sizeof(float), 1, f) == 1, "offset");
+            i64 total = shape_total(a->shape);
+            verify(flen == total, "i8 mismatch in size");
+            verify(fread(res, 1, flen, f) == flen, "could not read path: %o", uri_i8);
+            a->data = res;
+        }
+        fclose(f);
     }
-    fclose(f);
     return a;
 }
 
@@ -58,157 +153,74 @@ tensor tensor_with_array(tensor a, array dims) {
 }
 
 none tensor_init(tensor a) {
-    a->total    = shape_total(a->shape);
-    if (!a->realized)
-         a->realized = A_alloc2(typeid(vecf),  typeid(f32), a->shape, false);
-    if (!a->data)
-         a->data     = A_alloc2(typeid(veci8), typeid(i8),  a->shape, false);
+    a->total = shape_total(a->shape);
+    if (!a->realized) a->realized = A_alloc2(typeid(vecf),  typeid(f32), a->shape, false);
+    if (!a->grad)     a->grad     = A_alloc2(typeid(vecf),  typeid(f32), a->shape, false);
+    if (!a->data)     a->data     = A_alloc2(typeid(veci8), typeid(i8),  a->shape, false);
 }
 
-// Approximate division using reciprocal multiplication
-static inline __m256i avx2_div_epi16(__m256i num, __m256i denom) {
-    __m256  num_f  = _mm256_cvtepi32_ps(_mm256_cvtepi16_epi32(_mm256_castsi256_si128(num)));
-    __m256  denom_f = _mm256_cvtepi32_ps(_mm256_cvtepi16_epi32(_mm256_castsi256_si128(denom)));
-    
-    __m256  recip = _mm256_rcp_ps(denom_f);  // Approximate 1/x
-    __m256  res_f = _mm256_mul_ps(num_f, recip);
-    
-    __m256i res = _mm256_cvtps_epi32(res_f);
-    return res;
+static __m256 tanh_approx(__m256 x) {
+    // Approximate tanh(x) using a polynomial
+    const __m256 alpha = _mm256_set1_ps(1.0f);
+    const __m256 beta  = _mm256_set1_ps(0.142857f); // 1/7 approximation
+    const __m256 gamma = _mm256_set1_ps(0.333333f); // 1/3 approximation
+    const __m256 x2    = _mm256_mul_ps(x, x);  // x^2
+    const __m256 num   = _mm256_fmadd_ps(gamma, x2, alpha); // gamma*x^2 + 1
+    const __m256 denom = _mm256_fmadd_ps(beta, x2, alpha); // beta*x^2 + 1
+    return _mm256_div_ps(num, denom); // Approx tanh(x)
 }
 
-none tensor_resize(tensor input, tensor output) {
-    if (compare(input->shape, output->shape) == 0) {
-        memcpy(input->realized, output->realized, total(input->shape) * sizeof(f32));
-        memcpy(input->data,     output->data,     total(input->shape) * sizeof(i8));
-        return;
-    }
-    // we are asserting the data is in quantized state, but that may not be the case always
-    int   in_w    = input ->shape->data[1];
-    int   in_h    = input ->shape->data[0];
-    int   out_w   = output->shape->data[1];
-    int   out_h   = output->shape->data[0];
-    float scale_x = (float)in_w / out_w;
-    float scale_y = (float)in_h / out_h;
-    i8*   dst_i8  = output->data;
-    i32*  dst_f32 = output->realized;
+none tensor_gemm(tensor a, tensor b, tensor bias, Activation activation, tensor c) {
+    i32 m = a->shape->data[0];  // Rows in a (output height)
+    i32 k = a->shape->data[1];  // Shared dimension (cols of a, rows of b)
+    i32 n = c->shape->data[1];  // Columns in b and c (output width)
 
-    for (int oy = 0; oy < out_h; oy++) {
-        int ox = 0;
-        for (; ox < out_w; ox += 32) {  // Process 64 pixels at a time (512-bit / 8-bit)
-            __m256i sum   = _mm256_setzero_si256();
-            float   fx    = ox * scale_x;
-            float   fy    = oy * scale_y;
-            int     sx    = (int)fx;
-            int     sy    = (int)fy;
-            int     ex    = (int)((ox + 1) * scale_x);
-            int     ey    = (int)((oy + 1) * scale_y);
-            __m256i count = _mm256_set1_epi8((int8_t)(ey - sy) * (ex - sx));
+    f32* b_data = b->realized;  // Weights (k × n)
+    f32* c_data = c->realized;  // Output (m × n)
+    f32* bias_data = bias ? bias->realized : NULL;
+    f32* a_data = a->realized;  // Input (m × k)
 
-            for (int iy = sy; iy < ey; iy++)
-                for (int ix = sx; ix < ex; ix++)
-                    sum = _mm256_add_epi8(sum, _mm256_loadu_si256((__m256i*)&((i8*)input->data)[iy * in_w + ix]));
-            
-            count       = _mm256_max_epu8(count, _mm256_set1_epi8(1));
-            
-            //__m256i avg = _mm256_div_epi8(sum, count); <--- avx512 is nicer
+    const i32 vec_size = 8;  // AVX2 processes 8 floats per iteration
+    i32 n_aligned = n - (n % vec_size);  // Ensure full AVX2 blocks
 
-            // Convert `sum` and `count` from epi8 -> epi16 (zero extend lower 128 bits)
-            __m256i sum_lo    = _mm256_cvtepu8_epi16(_mm256_castsi256_si128(sum));
-            __m256i sum_hi    = _mm256_cvtepu8_epi16(_mm256_extracti128_si256(sum, 1));
-            __m256i count_lo  = _mm256_cvtepu8_epi16(_mm256_castsi256_si128(count));
-            __m256i count_hi  = _mm256_cvtepu8_epi16(_mm256_extracti128_si256(count, 1));
-
-            // Ensure no division by zero
-            count_lo = _mm256_max_epu16(count_lo, _mm256_set1_epi16(1));
-            count_hi = _mm256_max_epu16(count_hi, _mm256_set1_epi16(1));
-
-            // Approximate integer division: (sum + (count/2)) / count for rounding
-            __m256i avg_lo = avx2_div_epi16(sum_lo, count_lo);  // Manual division loop needed
-            __m256i avg_hi = avx2_div_epi16(sum_hi, count_hi);  // Manual division loop needed
-
-            // Pack results back to epi8 (saturating pack)
-            __m256i avg = _mm256_packus_epi16(avg_lo, avg_hi);
-
-            // Store result
-            _mm256_storeu_si256((__m256i*)&((i8*)output->data)[oy * out_w + ox], avg);
-        }
-        for (; ox < out_w; ox++) {
-            int   sum   = 0;
-            float fx    = ox * scale_x;
-            float fy    = oy * scale_y;
-            int   sx    = (int)fx;
-            int   sy    = (int)fy;
-            int   ex    = (int)((ox + 1) * scale_x);
-            int   ey    = (int)((oy + 1) * scale_y);
-            for (int iy = sy; iy < ey; iy++)
-                for (int ix = sx; ix < ex; ix++)
-                    sum  += ((i8*)input->data)[iy * in_w + ix];
-            
-            int count = (ey - sy) * (ex - sx);
-            ((i8*)output->data)[oy * out_w + ox] = sum / count;
-        }
-    }
-    if (output->realized) {
-        f32* dst = output->realized;
-        i8*    q = output->data;
-        /// can we convert to f32 using simd?
-        int total_pixels = out_w * out_h;
-        int i = 0;
-        for (; i + 16 <= total_pixels; i += 16) { // Process 16 pixels at a time
-            __m128i i8_vals = _mm_loadu_si128((__m128i*)&q[i]); // Load 16 int8 values
-            __m256 float_vals = _mm256_cvtepi32_ps(_mm256_cvtepi8_epi32(i8_vals)); // Convert to f32
-            _mm256_storeu_ps(&dst[i], float_vals); // Store converted values
-        }
-        // Handle remaining pixels (non-multiple of 16)
-        for (; i < total_pixels; i++)
-            dst[i] = (float)q[i] / 255.0;
-    }
-}
-
-
-none tensor_gemm(tensor input, tensor weights, tensor bias, bool relu, tensor output) {
-    i32   input_h      = input   -> shape->data[0];  // out_h * out_w
-    i32   input_w      = input   -> shape->data[1];  // filter_h * filter_w * in_c
-    i32   output_w     = output  -> shape->data[1];
-    f32*  weight_data  = weights -> realized;
-    f32*  output_data  = output  -> realized;
-    f32*  bias_data    = bias    ?  bias->realized : NULL;
-    f32*  input_data   = input->realized;
-
-    const i32 vec_size = 8; // AVX2 processes 8 floats per iteration
-    i32 oc_aligned = output_w - (output_w % vec_size);  // Ensure we process full AVX2 blocks
-
-    /// Perform GEMM: im2col_matrix * weights_matrix
-    for (i32 ohw = 0; ohw < input_h; ohw++) {
-        i32 i = 0;
+    // Perform GEMM: c = a * b + bias
+    for (i32 i = 0; i < m; i++) {  // Loop over rows of c
+        i32 j = 0;
 
         // Process 8 output channels at a time
-        for (; i < oc_aligned; i += vec_size) { 
-            __m256 sum = bias_data ? _mm256_loadu_ps(&bias_data[i]) : _mm256_setzero_ps();
+        if (false)
+        for (; j < n_aligned; j += vec_size) { 
+            __m256 sum = bias_data ? _mm256_loadu_ps(&bias_data[j]) : _mm256_setzero_ps();
 
-            for (i32 j = 0; j < input_w; j++) {
-                __m256 input_vec   = _mm256_set1_ps(input_data[ohw * input_w + j]); // Broadcast input
-                __m256 weight_vec  = _mm256_loadu_ps(&weight_data[j * output_w + i]); // Load 8 weights
-                sum = _mm256_fmadd_ps(input_vec, weight_vec, sum); // Multiply and accumulate
+            for (i32 k_idx = 0; k_idx < k; k_idx++) {
+                __m256 a_vec = _mm256_set1_ps(a_data[i * k + k_idx]); // Broadcast a value
+                __m256 b_vec = _mm256_loadu_ps(&b_data[k_idx * n + j]); // Load 8 b values
+                sum = _mm256_fmadd_ps(a_vec, b_vec, sum); // Multiply and accumulate
             }
 
-            // Apply ReLU if needed
-            if (relu) {
+            // Apply activation
+            if (activation == Activation_relu) {
                 __m256 zero_vec = _mm256_setzero_ps();
                 sum = _mm256_max_ps(sum, zero_vec);  // ReLU: max(sum, 0)
+            } else if (activation == Activation_tanh) {
+                sum = tanh_approx(sum);  // Apply tanh approximation
             }
 
-            _mm256_storeu_ps(&output_data[ohw * output_w + i], sum);
+            _mm256_storeu_ps(&c_data[i * n + j], sum);
         }
 
-        // Process remaining output channels using scalar ops
-        for (; i < output_w; i++) { 
-            f32 sum = bias_data ? bias_data[i] : 0.0f;
-            for (i32 j = 0; j < input_w; j++) {
-                sum += input_data[ohw * input_w + j] * weight_data[j * output_w + i];
+        // Process remaining output channels with scalar ops
+        for (; j < n; j++) { 
+            f32 sum = bias_data ? bias_data[j] : 0.0f;
+            for (i32 k_idx = 0; k_idx < k; k_idx++) {
+                sum += a_data[i * k + k_idx] * b_data[k_idx * n + j];
             }
-            output_data[ohw * output_w + i] = (!relu || sum > 0) ? sum : 0;
+            if (activation == Activation_relu)
+                c_data[i * n + j] = sum > 0 ? sum : 0;
+            else if (activation == Activation_tanh)
+                c_data[i * n + j] = tanh(sum);
+            else
+                c_data[i * n + j] = sum;
         }
     }
 }
