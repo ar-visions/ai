@@ -25,9 +25,6 @@ typedef struct _tensor* tensor;
     i_method(X,Y, public, f32,  grad_sum) \
     i_method(X,Y, public, none, gemm,   tensor, tensor, Activation, tensor) \
     i_override(X,Y, method, init)
-#ifndef tensor_intern
-#define tensor_intern
-#endif
 declare_class(tensor)
 
 #define Initializer_schema(X,Y,...) \
@@ -63,9 +60,6 @@ declare_enum (Pooling)
     i_method  (X,Y, public,   none,          finalize) \
     i_method  (X,Y, public,   none,          forward) \
     i_method  (X,Y, public,   tensor,        back, tensor)
-#ifndef op_intern
-#define op_intern
-#endif
 declare_class (op)
 
 #define ops_schema(X,Y,...)
@@ -73,15 +67,9 @@ declare_meta(ops, array, op)
 
 #define input_schema(X,Y,...) \
     i_prop(X,Y, public, tensor, input)
-#ifndef input_intern
-#define input_intern
-#endif
 declare_mod (input, op)
 
 #define output_schema(X,Y,...)
-#ifndef output_intern
-#define output_intern
-#endif
 declare_mod (output, op)
 
 /*
@@ -97,9 +85,6 @@ declare_mod (output, op)
 #define concatenate_schema(X,Y,...) \
     i_prop(X,Y, public, i32, axis) \
     i_override(X,Y, method, finalize, forward)
-#ifndef concatenate_intern
-#define concatenate_intern
-#endif
 declare_mod (concatenate, op)
 
 
@@ -115,24 +100,15 @@ declare_mod (concatenate, op)
     i_override(X,Y, method,     finalize) \
     i_override(X,Y, method,     forward) \
     i_override(X,Y, method,     back)
-#ifndef conv_intern
-#define conv_intern
-#endif
 declare_mod (conv, op)
 
 #define reshape_schema(X,Y,...) \
     i_prop    (X,Y, public,   u32,        units)
-#ifndef reshape_intern
-#define reshape_intern
-#endif
 declare_mod (reshape, op)
 
 #define flatten_schema(X,Y,...) \
     i_override(X,Y, method, forward) \
     i_override(X,Y, method, back)
-#ifndef flatten_intern
-#define flatten_intern
-#endif
 declare_mod (flatten, op)
 
 #define dense_schema(X,Y,...) \
@@ -144,9 +120,6 @@ declare_mod (flatten, op)
     i_override(X,Y, method,     finalize) \
     i_override(X,Y, method,     forward) \
     i_override(X,Y, method,     back)
-#ifndef dense_intern
-#define dense_intern
-#endif
 declare_mod (dense, op)
 
 #define pool_schema(X,Y,...) \
@@ -156,16 +129,10 @@ declare_mod (dense, op)
     i_override(X,Y, method,     finalize) \
     i_override(X,Y, method,     forward) \
     i_override(X,Y, method,     back)
-#ifndef pool_intern
-#define pool_intern
-#endif
 declare_mod (pool, op)
 
 #define relu_schema(X,Y,...) \
     i_override(X,Y, method,     init)
-#ifndef relu_intern
-#define relu_intern
-#endif
 declare_mod (relu, op)
 
 #define keras_schema(X,Y,...) \
@@ -180,9 +147,6 @@ declare_mod (relu, op)
     i_method  (X,Y, public,   tensor,  forward,  tensor) \
     i_method  (X,Y, public,   tensor,  back,     tensor) \
     i_override(X,Y, method,   init)
-#ifndef keras_intern
-#define keras_intern
-#endif
 declare_class (keras)
 
 #endif
