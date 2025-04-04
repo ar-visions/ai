@@ -1,0 +1,10 @@
+import:
+    A       https://github.com/ar-visions/A         main
+    trinity https://github.com/ar-visions/trinity   main
+
+link:
+    A
+    trinity
+    -mavx2
+    -mfma
+	m

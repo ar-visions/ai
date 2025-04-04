@@ -1,8 +1,0 @@
-A https://github.com/ar-visions/A main
-trinity https://github.com/ar-visions/trinity main
-
-lib:
-    A trinity -mavx2 -mfma
-	m
-app:
-    A trinity -mavx2 -mfma
