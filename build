@@ -2,7 +2,7 @@ import:
     A       https://github.com/ar-visions/A         main
     trinity https://github.com/ar-visions/trinity   main
 
-link:
+lib:
     A
     trinity
     -mavx2
