@@ -92,20 +92,29 @@ none keras_init(keras k) {
     verify(isa(f) == typeid(input), "input expected");
     k->input = hold(f->tensor); // an inputs output is our input.. it does have a lonely little input tensor sitting there unused though
 
+    
+    string k_output2 = string("output");
+
     /// finalize layers
     each (k->ops, op, a) {
+        string k_output7 = string("output");
         a->output = find_output(k, a);
         each(a->op_inputs, op, i) {
+            string k_output6 = string("output");
             if (isa(i) == typeid(input)) {
+                string k_output5 = string("output");
                 verify(compare(a->tensor->shape, i->tensor->shape) == 0, "incompatible shapes");
                 drop(a->tensor);
+                string k_output4 = string("output");
                 a->tensor = hold(i->tensor);
             }
         }
+        string k_output3 = string("output");
         finalize(a);
     }
 
-    op output = get(k->op_map, string("output"));
+    string k_output = string("output");
+    op output = get(k->op_map, k_output);
     k->output = hold(output->tensor);
 }
 
@@ -119,9 +128,9 @@ none keras_train(keras k, i32 epochs, map train, f32 learning_rate) {
             f32    sum0       = sum(input);
             f32    loss       = 0;
             tensor d_output   = tensor(shape, target->shape);
-            f32*   d_out_ptr  = d_output->realized;
-            f32*   output_ptr = output->realized;
-            f32*   target_ptr = target->realized;
+            f32*   d_out_ptr  = data(d_output->realized);
+            f32*   output_ptr = data(output->realized);
+            f32*   target_ptr = data(target->realized);
 
             for (i32 i = 0, t = total(target->shape); i < t; i++) {
                 f32 diff         = output_ptr[i] - target_ptr[i];
@@ -133,14 +142,14 @@ none keras_train(keras k, i32 epochs, map train, f32 learning_rate) {
             tensor d_input = back(k, d_output);
             each (k->ops, op, layer) {
                 if (layer->weights) {
-                    f32* w   = layer->weights->realized;
-                    f32* d_w = layer->weights->grad;  // Assume we store computed gradients here in backprop
+                    f32* w   = data(layer->weights->realized);
+                    f32* d_w = data(layer->weights->grad);  // Assume we store computed gradients here in backprop
                     for (i32 i = 0; i < total(layer->weights->shape); i++)
                         w[i] -= learning_rate * d_w[i];
                 }
                 if (layer->bias) {
-                    f32* b   = layer->bias->realized;
-                    f32* d_b = layer->bias->grad; // Bias gradients should be stored here
+                    f32* b   = data(layer->bias->realized);
+                    f32* d_b = data(layer->bias->grad); // Bias gradients should be stored here
                     for (i32 i = 0; i < total(layer->bias->shape); i++)
                         b[i] -= learning_rate * d_b[i];
                 }
@@ -154,7 +163,7 @@ none keras_train(keras k, i32 epochs, map train, f32 learning_rate) {
 
 tensor keras_forward(keras k, tensor input) {
     /// copy input tensor, and pass forward
-    memcpy(k->input->realized, input->realized, total(input->shape) * sizeof(f32));
+    memcpy(data(k->input->realized), data(input->realized), total(input->shape) * sizeof(f32));
     f32 f2 = sum(input);
     //print("sum of keras input: %.2f", f2);
 
@@ -171,18 +180,19 @@ tensor keras_forward(keras k, tensor input) {
 
     tensor res = tensor(shape, k->output->shape);
     //print("keras output ident = %x", k->output->realized);  
-    memcpy(res->realized, k->output->realized, sizeof(f32) * total(k->output->shape));
+    memcpy(data(res->realized), data(k->output->realized), sizeof(f32) * total(k->output->shape));
     return res;
 }
 
 tensor keras_back(keras k, tensor d_output) {
     backwards (k->order, op, a) {
-        if (a->weights) memset(a->weights->grad, 0, total(a->weights->shape) * sizeof(f32));
-        if (a->bias)    memset(a->bias->grad,    0, total(a->bias->shape)    * sizeof(f32));
+        if (a->weights) memset(data(a->weights->grad), 0, total(a->weights->shape) * sizeof(f32));
+        if (a->bias)    memset(data(a->bias->grad),    0, total(a->bias->shape)    * sizeof(f32));
         d_output = back(a, d_output);
     }
     return d_output;
 }
+
 
 // post-init is mostly established in keras_init 
 // (at this point, we have all model data in props)
@@ -259,7 +269,7 @@ none flatten_forward(flatten a) {
 tensor flatten_back(flatten a, tensor d_output) {
     int t = total(d_output->shape);
     tensor flat = tensor(shape, shape_new(1, t, 0));
-    memcpy(flat->realized, d_output->realized, t * sizeof(f32));
+    memcpy(data(flat->realized), data(d_output->realized), t * sizeof(f32));
     return flat;
 }
 

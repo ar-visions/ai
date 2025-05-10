@@ -1,10 +1,8 @@
 import:
     A       https://github.com/ar-visions/A         main
+    vec     https://github.com/ar-visions/vec       main
     trinity https://github.com/ar-visions/trinity   main
-
-link:
-    A
-    trinity
+        -lm -ltrinity
     -mavx2
     -mfma
-	m
+

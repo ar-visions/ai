@@ -11,20 +11,20 @@ declare_enum (Activation)
 
 typedef struct _tensor* tensor;
 #define tensor_schema(X,Y,...) \
-    i_ctr (X,Y, public, string) \
-    i_ctr (X,Y, public, array) \
-    i_ctr (X,Y, public, image) \
-    i_prop(X,Y, public, shape,          shape) \
-    i_prop(X,Y, public, vector_i8,      data) \
-    i_prop(X,Y, public, vector_f32,     realized) \
-    i_prop(X,Y, public, vector_f32,     grad) \
-    i_prop(X,Y, public, i32,            offset) \
-    i_prop(X,Y, public, f32,            scale) \
-    i_prop(X,Y, intern, u64,            total) \
-    i_method(X,Y, public, f32,  sum) \
-    i_method(X,Y, public, f32,  grad_sum) \
-    i_method(X,Y, public, none, gemm,   tensor, tensor, Activation, tensor) \
-    i_override(X,Y, method, init)
+    i_ctr     (X,Y, public,   string) \
+    i_ctr     (X,Y, public,   array) \
+    i_ctr     (X,Y, public,   image) \
+    i_prop    (X,Y, public,   shape,     shape) \
+    i_prop    (X,Y, public,   vector,    data,     of, i8) \
+    i_prop    (X,Y, public,   vector,    realized, of, f32) \
+    i_prop    (X,Y, public,   vector,    grad,     of, f32) \
+    i_prop    (X,Y, public,   i32,       offset) \
+    i_prop    (X,Y, public,   f32,       scale) \
+    i_prop    (X,Y, intern,   u64,       total) \
+    i_method  (X,Y, public,   f32,       sum) \
+    i_method  (X,Y, public,   f32,       grad_sum) \
+    i_method  (X,Y, public,   none,      gemm,      tensor, tensor, Activation, tensor) \
+    i_override(X,Y, method,   init)
 declare_class(tensor)
 
 #define Initializer_schema(X,Y,...) \
@@ -50,7 +50,7 @@ declare_enum (Pooling)
 #define op_schema(X,Y,...) \
     i_prop    (X,Y, required, tensor,        tensor) \
     i_prop    (X,Y, required, string,        name) \
-    i_prop    (X,Y, public,   array_string,  inputs) \
+    i_prop    (X,Y, public,   array,         inputs, of, string) \
     i_prop    (X,Y, public,   Activation,    activation) \
     i_prop    (X,Y, public,   i8,            threshold) \
     i_prop    (X,Y, intern,   array,         op_inputs) \
@@ -95,11 +95,11 @@ declare_mod (concatenate, op)
     i_prop    (X,Y, required, shape,      strides) \
     i_prop    (X,Y, public,   i32,        in_channels) \
     i_prop    (X,Y, public,   i32,        out_channels) \
-    i_prop    (X,Y, public, tensor,  weights_matrix) \
-    i_prop    (X,Y, public, tensor,  im2col_matrix) \
-    i_override(X,Y, method,     finalize) \
-    i_override(X,Y, method,     forward) \
-    i_override(X,Y, method,     back)
+    i_prop    (X,Y, public,   tensor,     weights_matrix) \
+    i_prop    (X,Y, public,   tensor,     im2col_matrix) \
+    i_override(X,Y, method,   finalize) \
+    i_override(X,Y, method,   forward) \
+    i_override(X,Y, method,   back)
 declare_mod (conv, op)
 
 #define reshape_schema(X,Y,...) \
@@ -117,18 +117,18 @@ declare_mod (flatten, op)
     i_prop    (X,Y, public,   u32,        output_dim) \
     i_prop    (X,Y, public,   object,     kernel_initializer) \
     i_prop    (X,Y, public,   object,     weight_initializer) \
-    i_override(X,Y, method,     finalize) \
-    i_override(X,Y, method,     forward) \
-    i_override(X,Y, method,     back)
+    i_override(X,Y, method,   finalize) \
+    i_override(X,Y, method,   forward) \
+    i_override(X,Y, method,   back)
 declare_mod (dense, op)
 
 #define pool_schema(X,Y,...) \
     i_prop    (X,Y, public,   Pooling,    type) \
     i_prop    (X,Y, required, shape,      pool_size)  \
     i_prop    (X,Y, public,   shape,      strides) \
-    i_override(X,Y, method,     finalize) \
-    i_override(X,Y, method,     forward) \
-    i_override(X,Y, method,     back)
+    i_override(X,Y, method,   finalize) \
+    i_override(X,Y, method,   forward) \
+    i_override(X,Y, method,   back)
 declare_mod (pool, op)
 
 #define relu_schema(X,Y,...) \

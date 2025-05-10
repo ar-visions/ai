@@ -33,7 +33,7 @@ f32 tensor_grad_sum(tensor a) {
 
 none realize(tensor a) {
     if (!a->realized)
-         a->realized = A_alloc2(typeid(vecf),  typeid(f32), a->shape, false);
+         a->realized = vector(type, typeid(f32), vshape, a->shape);
 
     f32* dst = a->realized;
     u8*  src = (u8*)a->data;  // Now correctly treating as unsigned
@@ -86,7 +86,7 @@ none realize(tensor a) {
 
 tensor tensor_with_image(tensor a, image img) {
     a->shape = shape_new(img->width, img->height, 1, 0);
-    a->data  = vector(type, typeid(i8), shape, a->shape);
+    a->data  = vector(type, typeid(i8), vshape, a->shape);
     memcpy(a->data, data(img), img->height * img->width * 1);
     realize(a);
     return a;
@@ -102,8 +102,8 @@ tensor tensor_with_string(tensor a, string loc) {
         verify(img->channels = 1, "not grayscale");
         i64 total = img->width * img->height * img->channels;
         a->shape    = shape_new(img->width, img->height, 1, 0);
-        a->data     = A_alloc2(typeid(veci8), typeid(i8),  a->shape, false);
-        a->realized = A_alloc2(typeid(vecf),  typeid(f32), a->shape, false);
+        a->data     = vector(type, typeid(i8),  vshape, a->shape);
+        a->realized = vector(type, typeid(f32), vshape, a->shape);
         memcpy(a->data, data(img), img->height * img->width * 1);
         a->offset = 0.0;
         a->scale  = 1 / 127.0; // we will want to fix this to -1.0 to 1.0 in training
@@ -116,14 +116,14 @@ tensor tensor_with_string(tensor a, string loc) {
         a->shape = shape_read(f);
         sz flen  = seek_length(f, typeid(f32));
         if (is_f32) {
-            vecf res = A_alloc2(typeid(vecf), typeid(f32), a->shape, false);
-            i64 total = shape_total(a->shape);
+            vector res = vector(type, typeid(f32), vshape, a->shape);
+            i64    total = shape_total(a->shape);
             verify(flen == total, "f32 mismatch in size");
             verify(fread(res, sizeof(f32), flen, f) == flen, "could not read path: %o", uri_f32);
             a->realized = res;
         } else {
             /// must really contain two floats for this to make sense.  i do not want this misbound; and its required model-wise
-            veci8 res = A_alloc2(typeid(veci8), typeid(i8), a->shape, false);
+            vector res = vector(type, typeid(i8), vshape, a->shape);
             verify(fread(&a->scale,  sizeof(float), 1, f) == 1, "scale");
             verify(fread(&a->offset, sizeof(float), 1, f) == 1, "offset");
             i64 total = shape_total(a->shape);
@@ -147,16 +147,15 @@ tensor tensor_with_array(tensor a, array dims) {
     }
     a->shape  = shape_from(index, shape);
     a->total  = shape_total(a->shape); // improve vectors in time
-    a->data   = A_valloc(typeid(i8), typeid(i8),
-        a->total, a->total, false);
+    a->data   = vector(type, typeid(i8), vshape, shape_new(a->total, 0));
     return a;
 }
 
 none tensor_init(tensor a) {
     a->total = shape_total(a->shape);
-    if (!a->realized) a->realized = A_alloc2(typeid(vecf),  typeid(f32), a->shape, false);
-    if (!a->grad)     a->grad     = A_alloc2(typeid(vecf),  typeid(f32), a->shape, false);
-    if (!a->data)     a->data     = A_alloc2(typeid(veci8), typeid(i8),  a->shape, false);
+    if (!a->realized) a->realized = vector(type, typeid(f32), vshape, a->shape);
+    if (!a->grad)     a->grad     = vector(type, typeid(f32), vshape, a->shape);
+    if (!a->data)     a->data     = vector(type, typeid(i8),  vshape, a->shape);
 }
 
 static __m256 tanh_approx(__m256 x) {
@@ -177,7 +176,7 @@ none tensor_gemm(tensor a, tensor b, tensor bias, Activation activation, tensor 
 
     f32* b_data = b->realized;  // Weights (k × n)
     f32* c_data = c->realized;  // Output (m × n)
-    f32* bias_data = bias ? bias->realized : NULL;
+    f32* bias_data = bias ? data(bias->realized) : NULL;
     f32* a_data = a->realized;  // Input (m × k)
 
     const i32 vec_size = 8;  // AVX2 processes 8 floats per iteration
