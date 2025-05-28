@@ -53,4 +53,4 @@ tensor dense_back(dense a, tensor d_output) {
     return d_input;
 }
 
-define_mod (dense, op)
+define_class (dense, op)

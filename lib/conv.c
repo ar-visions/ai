@@ -325,4 +325,4 @@ tensor conv_back(conv a, tensor d_output) {
     return d_input;
 }
 
-define_mod (conv, op)
+define_class (conv, op)

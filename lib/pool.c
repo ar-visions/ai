@@ -139,4 +139,4 @@ tensor pool_back(pool a, tensor d_output) {
     return d_input;
 }
 
-define_mod (pool, op)
+define_class (pool, op)

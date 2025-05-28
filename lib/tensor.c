@@ -224,4 +224,4 @@ none tensor_gemm(tensor a, tensor b, tensor bias, Activation activation, tensor 
     }
 }
 
-define_class(tensor)
+define_class(tensor, A)

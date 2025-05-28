@@ -4,9 +4,9 @@
 #include <A>
 
 #define Activation_schema(X,Y,...) \
-    enum_value_v(X,Y, none,             0) \
-    enum_value_v(X,Y, relu,             1) \
-    enum_value_v(X,Y, tanh,             2)
+    enum_value_v(E,T,Y, none,             0) \
+    enum_value_v(E,T,Y, relu,             1) \
+    enum_value_v(E,T,Y, tanh,             2)
 declare_enum (Activation)
 
 typedef struct _tensor* tensor;
@@ -28,22 +28,22 @@ typedef struct _tensor* tensor;
 declare_class(tensor)
 
 #define Initializer_schema(X,Y,...) \
-    enum_value_v(X,Y, undefined,        0) \
-    enum_value_v(X,Y, random,           1) \
-    enum_value_v(X,Y, zeros,            2) \
-    enum_value_v(X,Y, glorot_uniform,   3)
+    enum_value_v(E,T,Y, undefined,        0) \
+    enum_value_v(E,T,Y, random,           1) \
+    enum_value_v(E,T,Y, zeros,            2) \
+    enum_value_v(E,T,Y, glorot_uniform,   3)
 declare_enum (Initializer)
 
 #define Padding_schema(X,Y,...) \
-    enum_value_v(X,Y, valid,            0) \
-    enum_value_v(X,Y, same,             1)
+    enum_value_v(E,T,Y, valid,            0) \
+    enum_value_v(E,T,Y, same,             1)
 declare_enum (Padding)
 
 #define Pooling_schema(X,Y,...) \
-    enum_value_v(X,Y, undefined,        0) \
-    enum_value_v(X,Y, max,              1) \
-    enum_value_v(X,Y, min,              2) \
-    enum_value_v(X,Y, average,          3)
+    enum_value_v(E,T,Y, undefined,        0) \
+    enum_value_v(E,T,Y, max,              1) \
+    enum_value_v(E,T,Y, min,              2) \
+    enum_value_v(E,T,Y, average,          3)
 declare_enum (Pooling)
 
 /// standard training op
@@ -60,17 +60,17 @@ declare_enum (Pooling)
     i_method  (X,Y, public,   none,          finalize) \
     i_method  (X,Y, public,   none,          forward) \
     i_method  (X,Y, public,   tensor,        back, tensor)
-declare_class (op)
+declare_class(op)
 
 #define ops_schema(X,Y,...)
-declare_meta(ops, array, op)
+declare_class_2(ops, array, op)
 
 #define input_schema(X,Y,...) \
     i_prop(X,Y, public, tensor, input)
-declare_mod (input, op)
+declare_class_2(input, op)
 
 #define output_schema(X,Y,...)
-declare_mod (output, op)
+declare_class_2(output, op)
 
 /*
 ---------------------------------------------------------------------------------------
@@ -85,7 +85,7 @@ declare_mod (output, op)
 #define concatenate_schema(X,Y,...) \
     i_prop(X,Y, public, i32, axis) \
     i_override(X,Y, method, finalize, forward)
-declare_mod (concatenate, op)
+declare_class_2(concatenate, op)
 
 
 #define conv_schema(X,Y,...) \
@@ -100,16 +100,16 @@ declare_mod (concatenate, op)
     i_override(X,Y, method,   finalize) \
     i_override(X,Y, method,   forward) \
     i_override(X,Y, method,   back)
-declare_mod (conv, op)
+declare_class_2(conv, op)
 
 #define reshape_schema(X,Y,...) \
     i_prop    (X,Y, public,   u32,        units)
-declare_mod (reshape, op)
+declare_class_2(reshape, op)
 
 #define flatten_schema(X,Y,...) \
     i_override(X,Y, method, forward) \
     i_override(X,Y, method, back)
-declare_mod (flatten, op)
+declare_class_2(flatten, op)
 
 #define dense_schema(X,Y,...) \
     i_prop    (X,Y, public,   u32,        units) \
@@ -120,7 +120,7 @@ declare_mod (flatten, op)
     i_override(X,Y, method,   finalize) \
     i_override(X,Y, method,   forward) \
     i_override(X,Y, method,   back)
-declare_mod (dense, op)
+declare_class_2(dense, op)
 
 #define pool_schema(X,Y,...) \
     i_prop    (X,Y, public,   Pooling,    type) \
@@ -129,11 +129,11 @@ declare_mod (dense, op)
     i_override(X,Y, method,   finalize) \
     i_override(X,Y, method,   forward) \
     i_override(X,Y, method,   back)
-declare_mod (pool, op)
+declare_class_2(pool, op)
 
 #define relu_schema(X,Y,...) \
     i_override(X,Y, method,     init)
-declare_mod (relu, op)
+declare_class_2(relu, op)
 
 #define keras_schema(X,Y,...) \
     i_prop    (X,Y, required, string,        ident) \
@@ -147,6 +147,6 @@ declare_mod (relu, op)
     i_method  (X,Y, public,   tensor,  forward,  tensor) \
     i_method  (X,Y, public,   tensor,  back,     tensor) \
     i_override(X,Y, method,   init)
-declare_class (keras)
+declare_class(keras)
 
 #endif
