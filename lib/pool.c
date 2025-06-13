@@ -71,7 +71,6 @@ none pool_forward(pool a) {
                 _mm256_storeu_ps(&output_data[out_base_idx], max_vals);
                 f32 values[8];
                 memcpy(values, &output_data[out_base_idx], vec_size * sizeof(f32));
-                int test2 = 2;
             }
         }
     }
