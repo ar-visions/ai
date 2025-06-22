@@ -1,10 +1,8 @@
 #ifndef _AI_
 #define _AI_
 
-#include <A>
-
-#define Activation_schema(X,Y,...) \
-    enum_value_v(E,T,Y, none,             0) \
+#define Activation_schema(E,T,Y,...) \
+    enum_value_v(E,T,Y, _none,            0) \
     enum_value_v(E,T,Y, relu,             1) \
     enum_value_v(E,T,Y, tanh,             2)
 declare_enum (Activation)
@@ -27,19 +25,19 @@ typedef struct _tensor* tensor;
     i_override(X,Y, method,   init)
 declare_class(tensor)
 
-#define Initializer_schema(X,Y,...) \
+#define Initializer_schema(E,T,Y,...) \
     enum_value_v(E,T,Y, undefined,        0) \
     enum_value_v(E,T,Y, random,           1) \
     enum_value_v(E,T,Y, zeros,            2) \
     enum_value_v(E,T,Y, glorot_uniform,   3)
 declare_enum (Initializer)
 
-#define Padding_schema(X,Y,...) \
+#define Padding_schema(E,T,Y,...) \
     enum_value_v(E,T,Y, valid,            0) \
     enum_value_v(E,T,Y, same,             1)
 declare_enum (Padding)
 
-#define Pooling_schema(X,Y,...) \
+#define Pooling_schema(E,T,Y,...) \
     enum_value_v(E,T,Y, undefined,        0) \
     enum_value_v(E,T,Y, max,              1) \
     enum_value_v(E,T,Y, min,              2) \

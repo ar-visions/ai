@@ -1,22 +1,6 @@
 #include <import>
 #include <math.h>
 
-/// this post, post-init pattern is why its nice to have interns accessible in the module
-/// that makes things far better in a language, i think.  intern is internal to the module
-/// if you cannot trust your own module then thats really odd; the intern applies to the member space
-/// but accessibility is within module
-
-/// with silver, intern is about module access; it actually makes things easier to shift around
-/// its more free,
-
-/// silver really is based on A, and with A 
-/// you may load entire objects quite easily
-/// without inventing new protocol on top of an object model
-/// for instance: how do you import from json?
-/// same way!  sometimes you take in arrays,
-/// sometimes you take in string, or numeric.
-/// thats unprecedented for object models in any language, let alone C
-
 none topo_visit(keras k, op current, map visited, map in_progress) {
     bool* prog = get(in_progress, current->name);
     if (prog && *prog) {
@@ -82,7 +66,7 @@ none keras_init(keras k) {
         each (a->inputs, string, input) {
             op res = get(k->op_map, input);
             verify (res, "could not resolve operation: %o", input);
-            push (a->op_inputs, res);
+            push (a->op_inputs, hold(res));
         }
     }
 
@@ -277,12 +261,12 @@ define_enum (Initializer)
 define_enum (Activation)
 define_enum (Padding)
 define_enum (Pooling)
-define_class(op)
-define_class  (input,       op)
-define_class  (flatten,     op)
-define_class  (concatenate, op)
-define_class  (relu,        op)
-define_class  (output,      op)
-define_class(keras)
-define_meta (ops,    array, op)
+define_class(op,            A)
+define_class(input,         op)
+define_class(flatten,       op)
+define_class(concatenate,   op)
+define_class(relu,          op)
+define_class(output,        op)
+define_class(keras,         A)
+define_class(ops,           array, op)
 
