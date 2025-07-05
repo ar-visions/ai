@@ -13,9 +13,9 @@ typedef struct _tensor* tensor;
     i_ctr     (X,Y, public,   array) \
     i_ctr     (X,Y, public,   image) \
     i_prop    (X,Y, public,   shape,     shape) \
-    i_prop    (X,Y, public,   vector,    data,     of, i8) \
-    i_prop    (X,Y, public,   vector,    realized, of, f32) \
-    i_prop    (X,Y, public,   vector,    grad,     of, f32) \
+    i_prop    (X,Y, public,   vector,    data,     meta, i8) \
+    i_prop    (X,Y, public,   vector,    realized, meta, f32) \
+    i_prop    (X,Y, public,   vector,    grad,     meta, f32) \
     i_prop    (X,Y, public,   i32,       offset) \
     i_prop    (X,Y, public,   f32,       scale) \
     i_prop    (X,Y, intern,   u64,       total) \
@@ -48,7 +48,7 @@ declare_enum (Pooling)
 #define op_schema(X,Y,...) \
     i_prop    (X,Y, required, tensor,        tensor) \
     i_prop    (X,Y, required, string,        name) \
-    i_prop    (X,Y, public,   array,         inputs, of, string) \
+    i_prop    (X,Y, public,   array,         inputs, meta, string) \
     i_prop    (X,Y, public,   Activation,    activation) \
     i_prop    (X,Y, public,   i8,            threshold) \
     i_prop    (X,Y, intern,   array,         op_inputs) \
